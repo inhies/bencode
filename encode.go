@@ -1,4 +1,8 @@
-//Originally from https://github.com/sheepa/videobit/tree/master/bencode
+/*
+	Package bencode implements reading and writing of 'bencoded'
+	object streams used by the Bittorent protocol.
+    Originally from https://github.com/sheepa/videobit/tree/master/bencode
+*/
 
 package bencode
 
@@ -12,7 +16,7 @@ import (
 //The result of the encoding operation is available in Encoder.Bytes.
 //Consecutive operations are appended to the byte stream.
 //
-//Accepts only string, int/int64, []interface{} and map[string]interface{} as input.
+//Accepts only string, int/int64, []interface{}, and map[string]interface{} as input.
 type Encoder struct {
 	Bytes []byte //the result byte stream
 }
@@ -47,14 +51,16 @@ func (enc *Encoder) encodeObject(in interface{}) []byte {
 	switch reflect.TypeOf(in).Kind() {
 	case reflect.String:
 		return enc.encodeString(in.(string))
-	case reflect.Int64:
-		return enc.encodeInteger(in.(int64))
-	case reflect.Int:
-		i := int64(in.(int))
-		return enc.encodeInteger(i)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		t := reflect.ValueOf(in)
+		return enc.encodeUinteger(t.Uint())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		t := reflect.ValueOf(in)
+		return enc.encodeInteger(t.Int())
 	case reflect.Slice:
 		return enc.encodeList(in.([]interface{}))
 	case reflect.Map:
+		//fmt.Printf("encoding map:%+v\n", in)
 		return enc.encodeDict(in.(map[string]interface{}))
 	default:
 		panic("Can't encode this type: " + reflect.TypeOf(in).Name())
@@ -65,13 +71,18 @@ func (enc *Encoder) encodeObject(in interface{}) []byte {
 func (enc *Encoder) encodeString(s string) []byte {
 	l := len(s)
 	if l <= 0 {
-		return nil
+		ret := fmt.Sprintf("%d:", l)
+		return []byte(ret)
 	}
 	ret := fmt.Sprintf("%d:%s", l, s)
 	return []byte(ret)
 }
 
 func (enc *Encoder) encodeInteger(i int64) []byte {
+	ret := fmt.Sprintf("i%de", i)
+	return []byte(ret)
+}
+func (enc *Encoder) encodeUinteger(i uint64) []byte {
 	ret := fmt.Sprintf("i%de", i)
 	return []byte(ret)
 }
@@ -103,6 +114,7 @@ func (enc *Encoder) encodeDict(m map[string]interface{}) []byte {
 	ret := []byte("d")
 	for _, k := range keys {
 		v := m[k]
+		//fmt.Printf("KEY: %+v, VALUE: %+v\n", k, v)
 		ret = append(ret, enc.encodeString(k)...)
 		ret = append(ret, enc.encodeObject(v)...)
 	}

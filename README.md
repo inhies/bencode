@@ -1,6 +1,4 @@
 bencode
 =======
 
-A bencode encoder/decoder for go
-
-Still a work in progress...
+A bencode encoder/decoder for go with support for stream decoding.

@@ -1,17 +1,15 @@
 /*
 	Package bencode implements reading and writing of 'bencoded'
 	object streams used by the Bittorent protocol.
-     Originally from https://github.com/sheepa/videobit/tree/master/bencode
+    Originally from https://github.com/sheepa/videobit/tree/master/bencode
 */
+
 package bencode
 
 import (
 	"fmt"
 	"strconv"
 )
-
-//type List []interface{}
-//type Dict map[string]interface{}
 
 //A Decoder reads and decodes bencoded objects from an input stream.
 //It returns objects that are either an "Integer", "String", "List" or "Dict".
@@ -22,11 +20,12 @@ import (
 //		o, _ := p.Decode()
 //		fmt.Printf("obj(%s): %#v\n", reflect.TypeOf(o).Name, o)
 //	}
+
 type Decoder struct {
 	stream   []byte
 	pos      int
 	Consumed bool //true if we have consumed all tokens
-	Last     int  //overall size to catch buffer underruns
+	Last     int  //position of last successfully read byte
 }
 
 //NewDecoder creates a new decoder for the given token stream
@@ -39,7 +38,6 @@ func (self *Decoder) Decode() (res interface{}, err error) {
 	res, err = self.nextObject()
 	if err == nil {
 		self.Last = self.pos
-		//fmt.Printf("NOPE %v -- %+v\n", self.pos, err)
 	}
 	return
 }
@@ -69,7 +67,7 @@ func (self *Decoder) nextObject() (res interface{}, err error) {
 	if self.Consumed {
 		return nil, fmt.Errorf("This parser's token stream is consumed!")
 	}
-	//println(self.pos)
+
 	switch c := self.stream[self.pos]; {
 	case c == 'i':
 		res, err = self.nextInteger()
@@ -86,15 +84,12 @@ func (self *Decoder) nextObject() (res interface{}, err error) {
 	if self.pos >= len(self.stream) {
 		self.Consumed = true
 	}
-	//fmt.Printf("%+v\n",err)
-	//println(self.pos)
 
-	//self.Last = self.pos
 	return
 }
 
 //fetches next integer from stream and advances pos pointer
-func (self *Decoder) nextInteger() (res int, err error) {
+func (self *Decoder) nextInteger() (res int64, err error) {
 	if self.pos < len(self.stream) {
 		if self.stream[self.pos] != 'i' {
 			return 0, fmt.Errorf("No starting 'i' found")
@@ -122,7 +117,7 @@ func (self *Decoder) nextInteger() (res int, err error) {
 	}
 
 	s := string(self.stream[self.pos+1 : idx])
-	r, err := strconv.Atoi(s)
+	r, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return
 	}
@@ -137,7 +132,7 @@ func (self *Decoder) nextString() (res string, err error) {
 
 	if self.pos < len(self.stream) {
 		if self.stream[self.pos] < '0' || self.stream[self.pos] > '9' {
-			err = fmt.Errorf("No string length determinator found")
+			err = fmt.Errorf("No string length determinator found ")
 			return
 		}
 	} else {
@@ -145,7 +140,6 @@ func (self *Decoder) nextString() (res string, err error) {
 		return
 	}
 
-	//fmt.Printf("pos: %v -- len: %v\n",self.pos,len(self.stream))
 	len_start := self.pos
 	len_end := self.pos
 
@@ -155,10 +149,6 @@ func (self *Decoder) nextString() (res string, err error) {
 			break
 		}
 		len_end++
-		/*println(len_start)
-		println(len_end)
-		println(self.pos)
-		println(self.size)*/
 
 		if len_end >= len(self.stream) {
 			err = fmt.Errorf("No string found ...")
@@ -196,11 +186,16 @@ func (self *Decoder) nextList() (res []interface{}, err error) {
 	}
 	self.pos++ //skip 'l'
 	for {
+		if self.stream[self.pos] == 'e' {
+			self.pos++ //skip 'e'
+			break
+		}
 		o, e := self.nextObject()
 		if e != nil {
 			err = e
 			return
 		}
+
 		res = append(res, o)
 		if self.stream[self.pos] == 'e' {
 			self.pos++ //skip 'e'
@@ -227,7 +222,10 @@ func (self *Decoder) nextDict() (res map[string]interface{}, err error) {
 
 	self.pos++ //skip 'd'
 	for {
-		//fmt.Printf("pos: %v -- len: %v\n",self.pos,len(self.stream))
+		if self.stream[self.pos] == 'e' {
+			self.pos++ //skip 'e'
+			break
+		}
 		key, e := self.nextString()
 		if e != nil {
 			err = e
@@ -238,7 +236,6 @@ func (self *Decoder) nextDict() (res map[string]interface{}, err error) {
 			err = e
 			return
 		}
-		//fmt.Printf("key: %s\nval: %#v\n", key, val)
 		res[string(key)] = val
 		if self.stream[self.pos] == 'e' {
 			self.pos++ //skip 'e'
